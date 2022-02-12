@@ -11,11 +11,18 @@
 // @match        https://*.amazon.in/*/dp/*
 // @match        https://*.amazon.in/dp/*
 // @match        https://*.amazon.in/gp/product/*
+// @require      https://raw.githubusercontent.com/xzer/lz-string/master/libs/lz-string.min.js
+// @require      https://raw.githubusercontent.com/xzer/lscache/master/lscache.min.js
+// @require      https://raw.githubusercontent.com/xzer/JavaScript-MD5/master/js/md5.min.js
 // @grant        none
 // ==/UserScript==
 
-(function() {
+;(function() {
   'use strict';
+
+  // anyway cleanup possible garbage cache
+  lscache.flushExpired();
+
   let authCode = localStorage.getItem('dp-translation-authCode');
   if (!authCode) {
     alert('no dp-translation-authCode!');
@@ -44,16 +51,27 @@
         accepts: {
           text: 'text/plain'
         }
-      }).done(function(data){
-        cb($('<p style="color:#00CD66">'+data+'</p>'));
-      });
+      }).done(cb);
+    };
+    let buildTranslaetdElem = function($elem, text) {
+        $elem.append($('<p style="color:#00CD66">'+text+'</p>'));
     };
     let doTranslation = function($target){
       $target.each(function(idx, elem){
         let $elem = $(elem);
-        callTranslation($elem.text(), function(translated){
-          $elem.append(translated);
-        });
+        let text = $elem.text();
+        if (!text) return;
+
+        let cacheKey = 'dptrans-' + md5(text);
+        let cachedTranslation = lscache.get(cacheKey);
+        if (cachedTranslation) {
+            buildTranslaetdElem($elem, LZString.decompress(cachedTranslation));
+        } else {
+            callTranslation(text, function(translated){
+                lscache.set(cacheKey, LZString.compress(translated), 30);
+                buildTranslaetdElem($elem, translated);
+            });
+        }
       });
     };
     let doTranslationWithRetry = function(selector, retry){
